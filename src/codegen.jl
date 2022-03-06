@@ -419,7 +419,7 @@ end
 
 function _julia_to_llvm(@nospecialize x)
     isboxed = Ref{UInt8}()
-    ty = pcpp"llvm::Type"(ccall(:julia_type_to_llvm,Ptr{Cvoid},(Any,Ref{UInt8}),x,isboxed))
+    ty = pcpp"llvm::Type"(ccall(:jl_type_to_llvm,Ptr{Cvoid},(Any,Ref{UInt8}),x,isboxed))
     (isboxed[] != 0, ty)
 end
 function julia_to_llvm(@nospecialize x)

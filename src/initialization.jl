@@ -12,11 +12,12 @@ depspath = joinpath(BASE_JULIA_SRC, "deps", "srccache")
 
 # Load the Cxx.jl bootstrap library (in debug version if we're running the Julia debug version)
 lib_suffix = ccall(:jl_is_debugbuild, Cint, ()) != 0 ? "-debug" : ""
-@static if Sys.iswindows()
-    const libcxxffi = joinpath(@__DIR__, "..", "deps", "usr", "bin", "libcxxffi"*lib_suffix)
-else
-    const libcxxffi = joinpath(@__DIR__, "..", "deps", "usr", "lib", "libcxxffi"*lib_suffix)
-end
+# @static if Sys.iswindows()
+#     const libcxxffi = joinpath(@__DIR__, "..", "deps", "usr", "bin", "libcxxffi"*lib_suffix)
+# else
+#     const libcxxffi = joinpath(@__DIR__, "..", "deps", "usr", "lib", "libcxxffi"*lib_suffix)
+# end
+const libcxxffi = joinpath(@__DIR__, "..", "deps", "build", "libcxxffi" * lib_suffix)
 # Set up Clang's global data structures
 function init_libcxxffi()
     # Force libcxxffi to be opened with RTLD_GLOBAL
@@ -62,15 +63,24 @@ end
 # call all the global constructors and initialize them as needed.
 import Base: llvmcall, cglobal
 
-CollectGlobalConstructors(C) = pcpp"llvm::Function"(
-    ccall((:CollectGlobalConstructors,libcxxffi),Ptr{Cvoid},(Ref{ClangCompiler},),C))
+struct ModuleFunctionName
+    mod::Ptr{Cchar}
+    func::Ptr{Cchar}
+end
+
+CollectGlobalConstructors(C) = (
+    ccall((:CollectGlobalConstructors,libcxxffi),ModuleFunctionName,(Ref{ClangCompiler},),C))
 
 function RunGlobalConstructors(C)
-    p = convert(Ptr{Cvoid}, CollectGlobalConstructors(C))
-    # If p is NULL it means we have no constructors to run
-    if p != C_NULL
-        eval(:(let f()=llvmcall($p,Cvoid,Tuple{}); f(); end))
-    end
+    p = CollectGlobalConstructors(C)
+    p.mod == C_NULL && return
+    @show mod = Base.unsafe_string(p.mod)
+    @show func = Base.unsafe_string(p.func)
+    eval(quote
+        let f()=llvmcall(($mod, $func),Cvoid,Tuple{})
+            f()
+        end
+    end)
 end
 
 """
@@ -188,6 +198,7 @@ The `isFramework` argument is the equivalent of passing the `-F` option
 to Clang.
 """
 function addHeaderDir(C, dirname; kind = C_User, isFramework = false)
+    # @show dirname
     ccall((:add_directory, libcxxffi), Cvoid,
         (Ref{ClangCompiler}, Cint, Cint, Ptr{UInt8}), C, kind, isFramework, dirname)
 end
@@ -371,13 +382,14 @@ end # iswindows
 # Also add clang's intrinsic headers
 function collectClangHeaders!(headers)
     llvmver = string(Base.libllvm_version)
-    baseclangdir = joinpath(BASE_JULIA_BIN, "..", "lib", "clang", llvmver, "include")
+    baseclangdir = "/home/melonedo/.julia/artifacts/8f2360be2c9c10c33d49eebc75d61a874d4ed029/lib/clang/12.0.1/include"
+    # baseclangdir = joinpath(BASE_JULIA_BIN, "..", "lib", "clang", llvmver, "include")
     cxxclangdir = @static IS_BINARYBUILD ? joinpath(@__DIR__, "..", "deps", "usr", "build", "clang-$llvmver", "lib", "clang", llvmver, "include") :
-                                           baseclangdir
+                          baseclangdir
     if isdir(baseclangdir)
         push!(headers, (baseclangdir, C_ExternCSystem))
     else
-        @assert isdir(cxxclangdir)
+        @assert isdir(@show cxxclangdir)
         push!(headers, (cxxclangdir, C_ExternCSystem))
     end
 end

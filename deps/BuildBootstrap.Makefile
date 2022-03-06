@@ -113,7 +113,7 @@ JULIA_DEBUG_LIB := $(JULIA_BIN)/../lib/libjulia-debug.$(SHLIB_EXT)
 all: usr/lib/libcxxffi.$(SHLIB_EXT) usr/lib/libcxxffi-debug.$(SHLIB_EXT) usr/clang_constants.jl
 
 usr/lib: usr/src
-	mkdir $@
+	mkdir $@ -p
 
 usr/lib/bootstrap.o: ../src/bootstrap.cpp BuildBootstrap.Makefile $(LIB_DEPENDENCY) llvm-patched | usr/lib
 	@$(call PRINT_CC, $(CXX) $(CXX_ABI_SETTING) -fno-rtti -DLIBRARY_EXPORTS -fPIC -O0 -g $(FLAGS) $(LLVM_EXTRA_CPPFLAGS) -c ../src/bootstrap.cpp -o $@)
